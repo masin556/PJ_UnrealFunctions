@@ -112,17 +112,18 @@ void ACAsyncLevelMove::OnLevelLoadComplete()
 	{
 		// 일정 시간 후에 페이드 인과 레벨 전환 수행
 		FTimerHandle FadeHandle;
-
-		// 레벨 로드가 완료되면 해당 레벨로 전환
-		UGameplayStatics::OpenLevel(this, NextLevelName);
-		UE_LOG(LogTemp, Log, TEXT("Level transition started."));
-
 		GetWorld()->GetTimerManager().SetTimer(FadeHandle, [this, PlayerController]()
 		{
-				SetFadeIn(5.0f, FColor::Black);
+
+				// 레벨 로드가 완료되면 해당 레벨로 전환
+				UGameplayStatics::OpenLevel(this, NextLevelName);
+				UE_LOG(LogTemp, Log, TEXT("Level transition started."));
+
+
 				SetInputEnabled(true);
 
-		}, 1.0f, false); //레벨 전환 시작
+		}, 1.0f, false); //1초 뒤 레벨 전환 시작
+
 
 
 		// 로딩 완료 시간 기록 및 출력
@@ -131,6 +132,7 @@ void ACAsyncLevelMove::OnLevelLoadComplete()
 		UE_LOG(LogTemp, Log, TEXT("Loading time : %.2f second"), LoadDuration);
 	}
 
+	SetFadeIn(5.0f, FColor::Black);
 	// UGameplayStatics::OpenLevel(this, NextLevelName);
 }
 
