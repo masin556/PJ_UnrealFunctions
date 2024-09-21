@@ -46,8 +46,6 @@ void ACAsyncLevelMove::OnActorEnter(UPrimitiveComponent* OverlappedComponent, AA
 		SetFadeOut(2.0f, FColor::Black); // 1초 동안 페이드 인
 
 
-
-
 		// 일정 시간 후 레벨 전환 및 페이드 아웃 처리
 		GetWorld()->GetTimerManager().SetTimer(LevelTransitionHandle, [this]()
 		{

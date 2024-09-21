@@ -1,63 +1,31 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
-
 #include "CAsyncLoadStream.h"
+#include "Components/BoxComponent.h"
+#include "Blueprint/UserWidget.h"
 #include "GameFramework/Character.h"
-#include "Blueprint/WidgetBlueprintLibrary.h"
-#include "Kismet/KismetSystemLibrary.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
+#include "Engine/World.h"
 
-// Sets default values
+
 ACAsyncLoadStream::ACAsyncLoadStream()
 {
-	// BoxCollision 초기화
 	BoxCollision1 = CreateDefaultSubobject<UBoxComponent>(TEXT("BoxCollision1"));
-	RootComponent = BoxCollision1;
+	BoxCollision1->SetupAttachment(RootComponent);
+	BoxCollision1->OnComponentBeginOverlap.AddDynamic(this, &ACAsyncLoadStream::OnBoxCollision1OverlapBegin);
 
-	// BoxCollision2 초기화 및 해당 콜리전을 RootComponent에 
 	BoxCollision2 = CreateDefaultSubobject<UBoxComponent>(TEXT("BoxCollision2"));
 	BoxCollision2->SetupAttachment(RootComponent);
+	BoxCollision2->OnComponentBeginOverlap.AddDynamic(this, &ACAsyncLoadStream::OnBoxCollision2OverlapBegin);
 
-	// 콜리전 콜백 등록
-	BoxCollision1->OnComponentBeginOverlap.AddDynamic(this, &ACAsyncLoadStream::OnOverlapBegin);
-	BoxCollision2->OnComponentBeginOverlap.AddDynamic(this, &ACAsyncLoadStream::OnOverlapBegin);
 
-	// 페이드 옵션 기본값
-	bEnableFade = true;
-
-	// 만약 FString으로 설정했다면 이곳에 NextLevelName기본값을 설정해주자. 
-	// NextLevelName = "NextLevel"; // 다음 레벨 이름 설정
-	// CurrentLevelName = UGameplayStatics::GetCurrentLevelName(this); // 현재 레벨 이름 가져오기
+	bIsLoading = true;
 }
 
-// Called when the game starts or when spawned
 void ACAsyncLoadStream::BeginPlay()
 {
 	Super::BeginPlay();
-
-}
-
-
-
-void ACAsyncLoadStream::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
-{
-	ACharacter* PlayerCharacter = Cast<ACharacter>(OtherActor);
-	if (PlayerCharacter)
-	{
-		PlayerCharacter->DisableInput(UGameplayStatics::GetPlayerController(this, 0);
-		
-		if (bEnableFade)
-		{
-			FadeOut();
-		}
-		else
-		{
-			LoadNextLevel();
-		}
-	}
-}
-
-void ACAsyncLoadStream::LoadNextLevel()
-{
+	// 시작시 불러올 구간
 	if (LoadingWidgetClass)
 	{
 		LoadingWidget = CreateWidget<UUserWidget>(GetWorld(), LoadingWidgetClass);
@@ -66,38 +34,89 @@ void ACAsyncLoadStream::LoadNextLevel()
 			LoadingWidget->AddToViewport();
 		}
 	}
+}
 
-	// 현재 레벨 언로드
-	UnloadCurrentLevel();
+void ACAsyncLoadStream::OnBoxCollision1OverlapBegin(class UPrimitiveComponent* OverlappedComp, AActor* OtherActor, class UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	// 충돌시 불러올 구간
+	SetInputEnabled(false);
+	FadeOut(2.0f, FColor::Black);
+	LoadStreamLevel(LoadLevelObject);
+}
 
-	// 다음 레벨 비동기로드
-	FName NextLevelName = GetLevelNameFromAsset(NextLevelObject);
-	if (!NextLevelName.IsValid())
+void ACAsyncLoadStream::OnBoxCollision2OverlapBegin(class UPrimitiveComponent* OverlappedComp, AActor* OtherActor, class UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	// 충돌시 불러올 구간
+	FadeOut(2.0f, FColor::Black);
+	LoadStreamLevel(LoadLevelObject);
+}
+
+void ACAsyncLoadStream::LoadStreamLevel(TSoftObjectPtr<UWorld> OnLevel)
+{
+	if (OnLevel.IsValid())
 	{
-		UGameplayStatics::LoadStreamLevel(this, NextLevelName, true, false, FLatentActionInfo());
+		UGameplayStatics::LoadStreamLevelBySoftObjectPtr(this, OnLevel, true, false, FLatentActionInfo());
+		SetInputEnabled(true);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Invalid Level Reference"));
 	}
 }
 
-void ACAsyncLoadStream::UnloadCurrentLevel()
+void ACAsyncLoadStream::UnLoadStreamLevel(TSoftObjectPtr<UWorld> UnLevel)
 {
-	FName CurrentLevelName = GetLevelNameFromAsset(CurrentLevel);
-	if (!CurrentLevelName.IsNone())
+	//if (!UnloadLevelName.IsEmpty()) //FString으로 받았을 경우
+	if (UnLevel.IsValid())
 	{
-		UGameplayStatics::UnloadStreamLevel(this, CurrentLevelName, FLatentActionInfo(), true);
+		//UGameplayStatics::UnloadStreamLevel(this, FName(*UnloadLevelName.GetAssetName()), FLatentActionInfo(), true);
+		UGameplayStatics::UnloadStreamLevelBySoftObjectPtr(this, UnLevel, FLatentActionInfo(), true);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Invalid Level Reference"));
 	}
 }
 
-void ACAsyncLoadStream::FadeIn()
+void ACAsyncLoadStream::FadeIn(float FadeTime, const FColor& FadeColor)
 {
+	PlayerController = GetWorld()->GetFirstPlayerController();
+	if (PlayerController)
+	{
+		PlayerController->ClientSetCameraFade(true, FadeColor, FVector2D(1.0f, 0.0f), FadeTime, false, true);
+		UE_LOG(LogTemp, Log, TEXT("FadeIn"));
+	}
 }
 
-void ACAsyncLoadStream::FadeOut()
+void ACAsyncLoadStream::FadeOut(float FadeTime, const FColor& FadeColor)
 {
+	PlayerController = GetWorld()->GetFirstPlayerController();
+	if (PlayerController)
+	{
+		PlayerController->ClientSetCameraFade(true, FadeColor, FVector2D(0.0f, 1.0f), FadeTime, false, true);
+		UE_LOG(LogTemp, Log, TEXT("FadeOut"));
+	}
 }
 
-FName ACAsyncLoadStream::GetLevelNameFromAsset(TSoftObjectPtr<UWorld> LevelAsset)
+void ACAsyncLoadStream::SetInputEnabled(bool bEnable)
 {
-	return FName();
+	PlayerController = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+
+	if (PlayerController)
+	{
+		if (bEnable)
+		{
+			PlayerController->SetIgnoreMoveInput(false);
+			PlayerController->SetIgnoreLookInput(false);
+			UE_LOG(LogTemp, Log, TEXT("Input Disabled"));
+		}
+		else
+		{
+			PlayerController->SetIgnoreMoveInput(true);
+			PlayerController->SetIgnoreLookInput(true);
+			UE_LOG(LogTemp, Log, TEXT("Input Enabled (Default)"));
+		}
+	}
 }
 
 
